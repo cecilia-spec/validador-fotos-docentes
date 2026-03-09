@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import io
 import pandas as pd
+from PIL import ImageDraw
 
 st.set_page_config(page_title="Validador de fotos docentes", layout="wide")
 
@@ -109,6 +110,30 @@ def crop_to_square(img: Image.Image):
     return ImageOps.fit(img, (1000, 1000), method=Image.Resampling.LANCZOS)
 
 
+def make_circular_preview(img: Image.Image, size=500):
+    sq = ImageOps.fit(img.convert("RGBA"), (size, size), method=Image.Resampling.LANCZOS)
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size, size), fill=255)
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.paste(sq, (0, 0), mask)
+    return out
+
+
+def make_rise_mockup(circular_img: Image.Image):
+    card_w, card_h = 1100, 700
+    base = Image.new("RGB", (card_w, card_h), (10, 31, 92))
+    draw = ImageDraw.Draw(base)
+    draw.rectangle((0, 0, card_w, 120), fill=(245, 245, 245))
+    draw.text((380, 35), "Conoce al profesor del curso", fill=(40, 40, 40))
+    circle_x, circle_y = 120, 170
+    base.paste(circular_img, (circle_x, circle_y), circular_img)
+    draw.text((670, 280), "Nombre del docente", fill=(255, 255, 255))
+    draw.text((670, 350), "Breve presentación académica y profesional", fill=(255, 255, 255))
+    draw.text((670, 390), "Vista previa del perfil en el curso", fill=(255, 255, 255))
+    return base
+
+
 def draw_face_box(img_cv, face):
     annotated = img_cv.copy()
     if face is not None:
@@ -147,10 +172,26 @@ def recommendation_text(status_key):
     return "La fotografía no cumple con los criterios mínimos y se recomienda solicitar una nueva imagen."
 
 
-st.title("Validador de fotografías docentes")
+st.title("Validador y preparador de foto de perfil docente")
 st.write(
-    "Subí una foto y el sistema revisará criterios técnicos y visuales para perfiles docentes en cursos virtuales."
+    "Subí una foto para verificar si cumple los criterios institucionales y obtener una versión optimizada para el perfil del curso en Rise."
 )
+
+st.markdown("### Ejemplo de buena práctica")
+st.info(
+    "Referencia sugerida: plano medio, mirada a cámara, buena iluminación, vestimenta profesional y fondo institucional o neutro."
+)
+
+with st.expander("Criterios sugeridos para una foto adecuada"):
+    st.markdown(
+        """
+- Persona de frente y mirando a cámara
+- Buena iluminación y nitidez
+- Fondo institucional o neutro
+- Hombros visibles y encuadre centrado
+- Formato cuadrado para optimizar la visualización circular en Rise
+        """
+    )
 
 with st.sidebar:
     st.header("Configuración institucional")
@@ -307,11 +348,21 @@ if uploaded_file:
 
     col1, col2 = st.columns([1, 1])
 
+    circular_preview = make_circular_preview(image_for_analysis, size=420)
+    rise_mockup = make_rise_mockup(circular_preview)
+
     with col1:
         st.subheader("Vista previa")
         st.image(image, caption="Imagen original", use_container_width=True)
         if auto_crop:
             st.image(image_for_analysis, caption="Vista previa cuadrada", use_container_width=True)
+
+    st.subheader("Vista en Rise")
+    rise_col1, rise_col2 = st.columns(2)
+    with rise_col1:
+        st.image(circular_preview, caption="Vista circular del perfil", width=320)
+    with rise_col2:
+        st.image(rise_mockup, caption="Simulación de perfil en el curso", use_container_width=True)
 
     with col2:
         st.subheader("Detección")
@@ -367,6 +418,16 @@ if uploaded_file:
     else:
         st.write("No se detectaron ajustes importantes.")
 
+    st.subheader("Corregir esta foto")
+    st.markdown("- [Quitar o ajustar fondo con Remove.bg](https://www.remove.bg)")
+    st.markdown("- [Editar la imagen con Canva](https://www.canva.com)")
+    st.markdown("- [Mejorar o retocar con Adobe Express](https://www.adobe.com/express)")
+
+    prompt_ia = """Mejora esta fotografía para un perfil docente institucional. Mantén la apariencia natural de la persona, con fondo institucional o neutro, buena iluminación, nitidez, encuadre centrado y formato cuadrado. La imagen debe verse profesional y adecuada para una visualización circular en un curso virtual."""
+    st.subheader("Prompt sugerido para herramientas con IA")
+    st.code(prompt_ia)
+    st.caption("Podés copiar este texto y usarlo en una herramienta externa de edición asistida por IA.")
+
     report = f"""
 Estado automático: {SEM_STATUS[status_key]}
 Puntaje: {score}%
@@ -383,9 +444,27 @@ Observaciones manuales:
         buffer = io.BytesIO()
         image_for_analysis.save(buffer, format="PNG")
         st.download_button(
-            label="Descargar vista previa cuadrada",
+            label="Descargar foto optimizada en cuadrado",
             data=buffer.getvalue(),
             file_name="foto_docente_cuadrada.png",
+            mime="image/png"
+        )
+
+        circle_buffer = io.BytesIO()
+        circular_preview.save(circle_buffer, format="PNG")
+        st.download_button(
+            label="Descargar vista circular",
+            data=circle_buffer.getvalue(),
+            file_name="foto_docente_circular.png",
+            mime="image/png"
+        )
+
+        mockup_buffer = io.BytesIO()
+        rise_mockup.save(mockup_buffer, format="PNG")
+        st.download_button(
+            label="Descargar simulación estilo Rise",
+            data=mockup_buffer.getvalue(),
+            file_name="simulacion_perfil_rise.png",
             mime="image/png"
         )
 
